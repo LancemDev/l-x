@@ -1,6 +1,8 @@
 Flask
 python-dotenv
 openai
-telegram
+python-telegram-bot
 requests
-pinecone
+pinecone-client
+tenacity
+PyPDF2
