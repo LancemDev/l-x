@@ -1,6 +1,6 @@
 Flask
 python-dotenv
 openai
-python-telegram-bot
+telegram
 requests
 pinecone
