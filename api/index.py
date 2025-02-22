@@ -1,6 +1,6 @@
 import os
 import logging
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, render_template, redirect, url_for
 import openai
 from dotenv import load_dotenv
 from pinecone import Pinecone, ServerlessSpec
@@ -100,7 +100,7 @@ def generate_caption():
 
 @app.route('/')
 def home():
-    return 'Hello, Pixers! We are cooking something up for you!'
+    return render_template('index.html')
 
 @app.route('/about')
 def about():
