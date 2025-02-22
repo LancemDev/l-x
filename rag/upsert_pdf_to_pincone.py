@@ -4,7 +4,7 @@ import PyPDF2
 import dotenv
 import logging
 import time
-from pinecone import Pinecone
+from pinecone import Pinecone, ServerlessSpec
 
 # Set up logging configuration
 logging.basicConfig(
@@ -21,7 +21,7 @@ dotenv.load_dotenv()
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 PINECONE_API_KEY = os.getenv("PINECONE_API_KEY")
 PINECONE_ENV = "us-east-1"  # Change based on your Pinecone account
-INDEX_NAME = "rag-demo"
+INDEX_NAME = "quickstart"
 PDF_FILE = "assets/docs/story.pdf"  # Your story file
 
 # ======= SETUP =======
@@ -43,7 +43,11 @@ if INDEX_NAME not in pc.list_indexes().names():
     pc.create_index(
         name=INDEX_NAME, 
         dimension=1536,  # OpenAI's ada-002 embedding dimension
-        metric='cosine'
+        metric='cosine',
+        spec=ServerlessSpec(
+            cloud='aws',
+            region=PINECONE_ENV
+        )
     )
     logger.info("Index created successfully")
     logger.info("Waiting for index to be ready...")
