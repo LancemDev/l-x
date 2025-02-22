@@ -3,6 +3,6 @@ python-dotenv
 openai
 python-telegram-bot
 requests
-pinecone-client
+pinecone
 tenacity
 PyPDF2
