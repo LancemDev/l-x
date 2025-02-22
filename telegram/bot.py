@@ -34,30 +34,41 @@ class TelegramBot:
 
     async def start_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         chat_id = update.message.chat.id
-        context.user_data[chat_id] = {}
+        context.user_data[chat_id] = {'state': 'ASK_TONE'}
         await update.message.reply_text("Welcome! What tone do you want for your post? (e.g., formal, casual)")
 
     async def handle_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         chat_id = update.message.chat.id
         text = update.message.text
 
-        if 'tone' not in context.user_data[chat_id]:
+        # Ensure chat_id is initialized in context.user_data
+        if chat_id not in context.user_data:
+            context.user_data[chat_id] = {}
+
+        state = context.user_data[chat_id].get('state')
+
+        logger.info(f"Received message from user {chat_id}: {text}")
+
+        if state == 'ASK_TONE':
             context.user_data[chat_id]['tone'] = text
+            context.user_data[chat_id]['state'] = 'ASK_IMAGE'
             await update.message.reply_text("Please upload an image to be attached to the post.")
-        elif 'ai_caption' not in context.user_data[chat_id]:
+        elif state == 'ASK_AI_CAPTION':
             if text.lower() == 'yes':
                 context.user_data[chat_id]['ai_caption'] = True
+                context.user_data[chat_id]['state'] = 'ASK_CAPTION_LENGTH'
                 await update.message.reply_text("How long do you want the caption to be? (e.g., short, medium, long)")
             else:
                 context.user_data[chat_id]['ai_caption'] = False
+                context.user_data[chat_id]['state'] = 'ASK_CAPTION'
                 await update.message.reply_text("Please provide the caption for the post.")
-        elif 'caption_length' not in context.user_data[chat_id] and context.user_data[chat_id]['ai_caption']:
+        elif state == 'ASK_CAPTION_LENGTH':
             context.user_data[chat_id]['caption_length'] = text
             await self.generate_ai_caption(chat_id, context)
-        elif 'caption' not in context.user_data[chat_id]:
+        elif state == 'ASK_CAPTION':
             context.user_data[chat_id]['caption'] = text
             await self.ask_for_approval(chat_id, context)
-        elif 'approved' not in context.user_data[chat_id]:
+        elif state == 'ASK_APPROVAL':
             if text.lower() == 'yes':
                 context.user_data[chat_id]['approved'] = True
                 await self.post_to_telegram_group(chat_id, context)
@@ -67,31 +78,53 @@ class TelegramBot:
 
     async def handle_photo(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         chat_id = update.message.chat.id
-        file_info = await context.bot.get_file(update.message.photo[-1].file_id)
-        context.user_data[chat_id]['image'] = file_info.file_path
-        await update.message.reply_text("Do you want the caption to be AI generated? (yes/no)")
+
+        # Ensure chat_id is initialized in context.user_data
+        if chat_id not in context.user_data:
+            context.user_data[chat_id] = {}
+
+        state = context.user_data[chat_id].get('state')
+
+        if state == 'ASK_IMAGE':
+            file_info = await context.bot.get_file(update.message.photo[-1].file_id)
+            context.user_data[chat_id]['image'] = file_info.file_path
+            context.user_data[chat_id]['state'] = 'ASK_AI_CAPTION'
+            await update.message.reply_text("Do you want the caption to be AI generated? (yes/no)")
 
     async def generate_ai_caption(self, chat_id, context):
         tone = context.user_data[chat_id]['tone']
         length = context.user_data[chat_id]['caption_length']
-        response = requests.post(
-            f"{self.proxy_url}/generate_caption",
-            json={'tone': tone, 'length': length}
-        )
-        caption = response.json().get('caption')
-        context.user_data[chat_id]['caption'] = caption
-        await self.ask_for_approval(chat_id, context)
+        try:
+            response = requests.post(
+                f"{self.proxy_url}/generate_caption",
+                json={'tone': tone, 'length': length}
+            )
+            response.raise_for_status()
+            caption = response.json().get('caption')
+            context.user_data[chat_id]['caption'] = caption
+            await self.ask_for_approval(chat_id, context)
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Error generating AI caption: {e}")
+            await context.bot.send_message(chat_id, "Sorry, there was an error generating the caption. Please try again.")
+        except ValueError as e:
+            logger.error(f"Error parsing JSON response: {e}")
+            await context.bot.send_message(chat_id, "Sorry, there was an error processing the response. Please try again.")
 
     async def ask_for_approval(self, chat_id, context):
         caption = context.user_data[chat_id]['caption']
+        context.user_data[chat_id]['state'] = 'ASK_APPROVAL'
         await context.bot.send_message(chat_id, f"Here is your post:\n\nCaption: {caption}\n\nDo you approve? (yes/no)")
 
     async def post_to_telegram_group(self, chat_id, context):
         group_id = 'YOUR_TELEGRAM_GROUP_ID'
         caption = context.user_data[chat_id]['caption']
         image_path = context.user_data[chat_id]['image']
-        await context.bot.send_photo(group_id, photo=open(image_path, 'rb'), caption=caption)
-        await context.bot.send_message(chat_id, "Post has been made to the group!")
+        try:
+            await context.bot.send_photo(group_id, photo=open(image_path, 'rb'), caption=caption)
+            await context.bot.send_message(chat_id, "Post has been made to the group!")
+        except Exception as e:
+            logger.error(f"Error posting to Telegram group: {e}")
+            await context.bot.send_message(chat_id, "Sorry, there was an error posting to the group. Please try again.")
 
     def run(self):
         logger.info("Starting bot...")

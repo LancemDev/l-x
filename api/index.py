@@ -28,7 +28,7 @@ def generate_caption():
 
 @app.route('/')
 def home():
-    return 'Hello, World!'
+    return 'Hello, Pixers! We are cooking something up for you!'
 
 @app.route('/about')
 def about():
