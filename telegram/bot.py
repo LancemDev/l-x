@@ -1,6 +1,6 @@
 import logging
-from telegram import Update
-from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, filters, ContextTypes
 import requests
 import os
 import dotenv
@@ -32,6 +32,7 @@ class TelegramBot:
         self.application.add_handler(CommandHandler("start", self.start_command))
         self.application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, self.handle_message))
         self.application.add_handler(MessageHandler(filters.PHOTO, self.handle_photo))
+        self.application.add_handler(CallbackQueryHandler(self.handle_button))
         logger.info(f"Initialized bot with proxy URL: {self.proxy_url}")
 
     async def start_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -91,7 +92,37 @@ class TelegramBot:
             file_info = await context.bot.get_file(update.message.photo[-1].file_id)
             context.user_data[chat_id]['image'] = file_info.file_path
             context.user_data[chat_id]['state'] = 'ASK_AI_CAPTION'
-            await update.message.reply_text("Do you want the caption to be AI generated? (yes/no)")
+            keyboard = [
+                [InlineKeyboardButton("Yes", callback_data='yes')],
+                [InlineKeyboardButton("No", callback_data='no')]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            await update.message.reply_text("Do you want the caption to be AI generated?", reply_markup=reply_markup)
+
+    async def handle_button(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        query = update.callback_query
+        await query.answer()
+        chat_id = query.message.chat.id
+        data = query.data
+
+        state = context.user_data[chat_id].get('state')
+
+        if state == 'ASK_AI_CAPTION':
+            if data == 'yes':
+                context.user_data[chat_id]['ai_caption'] = True
+                context.user_data[chat_id]['state'] = 'ASK_CAPTION_LENGTH'
+                await query.message.reply_text("How long do you want the caption to be? (e.g., short, medium, long)")
+            else:
+                context.user_data[chat_id]['ai_caption'] = False
+                context.user_data[chat_id]['state'] = 'ASK_CAPTION'
+                await query.message.reply_text("Please provide the caption for the post.")
+        elif state == 'ASK_APPROVAL':
+            if data == 'yes':
+                context.user_data[chat_id]['approved'] = True
+                await self.post_to_telegram_group(chat_id, context)
+            else:
+                context.user_data[chat_id]['approved'] = False
+                await query.message.reply_text("Post not approved. Please start over with /start.")
 
     async def generate_ai_caption(self, chat_id, context):
         tone = context.user_data[chat_id]['tone']
@@ -115,7 +146,12 @@ class TelegramBot:
     async def ask_for_approval(self, chat_id, context):
         caption = context.user_data[chat_id]['caption']
         context.user_data[chat_id]['state'] = 'ASK_APPROVAL'
-        await context.bot.send_message(chat_id, f"Here is your post:\n\nCaption: {caption}\n\nDo you approve? (yes/no)")
+        keyboard = [
+            [InlineKeyboardButton("Yes", callback_data='yes')],
+            [InlineKeyboardButton("No", callback_data='no')]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        await context.bot.send_message(chat_id, f"Here is your post:\n\nCaption: {caption}\n\nDo you approve?", reply_markup=reply_markup)
 
     async def post_to_telegram_group(self, chat_id, context):
         caption = context.user_data[chat_id]['caption']

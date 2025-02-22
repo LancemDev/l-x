@@ -20,9 +20,7 @@ pinecone_api_key = os.getenv('PINECONE_API_KEY')
 pinecone_env = os.getenv('PINECONE_ENV')
 
 # Initialize Pinecone
-pc = Pinecone(
-    api_key=os.getenv('PINECONE_API_KEY')
-)
+pc = Pinecone(api_key=os.getenv('PINECONE_API_KEY'))
 
 index_name = 'quickstart'
 vector_dimension = 1536
@@ -81,7 +79,7 @@ def generate_caption():
         length = data.get('length')
         
         response = openai.Completion.create(
-            engine="text-davinci-003",
+            model="gpt-4",
             prompt=f"""
             You are a social media manager for a company, Pixer. You need to generate a caption for a new product launch.
             Generate a {length} caption in a {tone} tone.
