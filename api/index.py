@@ -75,6 +75,8 @@ def get_embedding_with_retry(text: str, timeout: int = 10) -> List[float]:
 def generate_caption():
     try:
         data = request.json
+        logger.info(f"Received data for caption generation: {data}")
+        
         tone = data.get('tone')
         length = data.get('length')
         
@@ -90,6 +92,7 @@ def generate_caption():
         )
         
         caption = response.choices[0].text.strip()
+        logger.info(f"Generated caption: {caption}")
         return jsonify({'caption': caption})
     except Exception as e:
         logger.error(f"Error generating caption: {str(e)}")
