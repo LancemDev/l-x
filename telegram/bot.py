@@ -18,11 +18,13 @@ logger = logging.getLogger(__name__)
 # Configuration
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 PROXY_URL = "https://l-x.vercel.app"
+TELEGRAM_GROUP_ID = -1002410678804  # Use the group ID obtained from the updates
 
 class TelegramBot:
-    def __init__(self, token: str, proxy_url: str):
+    def __init__(self, token: str, proxy_url: str, group_id: int):
         self.token = token
         self.proxy_url = proxy_url.strip()
+        self.group_id = group_id
         if not self.proxy_url.startswith(('http://', 'https://')):
             self.proxy_url = 'https://' + self.proxy_url
         
@@ -116,11 +118,10 @@ class TelegramBot:
         await context.bot.send_message(chat_id, f"Here is your post:\n\nCaption: {caption}\n\nDo you approve? (yes/no)")
 
     async def post_to_telegram_group(self, chat_id, context):
-        group_id = 'YOUR_TELEGRAM_GROUP_ID'
         caption = context.user_data[chat_id]['caption']
         image_path = context.user_data[chat_id]['image']
         try:
-            await context.bot.send_photo(group_id, photo=open(image_path, 'rb'), caption=caption)
+            await context.bot.send_photo(self.group_id, photo=open(image_path, 'rb'), caption=caption)
             await context.bot.send_message(chat_id, "Post has been made to the group!")
         except Exception as e:
             logger.error(f"Error posting to Telegram group: {e}")
@@ -133,6 +134,7 @@ class TelegramBot:
 def main():
     token = os.getenv("TELEGRAM_TOKEN", TELEGRAM_TOKEN)
     proxy_url = os.getenv("PROXY_URL", PROXY_URL)
+    group_id = TELEGRAM_GROUP_ID  # Use the group ID directly
     
     if not proxy_url or proxy_url == "YOUR_PROXY_URL":
         raise ValueError("Please set a valid PROXY_URL")
@@ -140,7 +142,10 @@ def main():
     if not token or token == "YOUR_TELEGRAM_TOKEN":
         raise ValueError("Please set a valid TELEGRAM_TOKEN")
     
-    bot = TelegramBot(token, proxy_url)
+    if not group_id:
+        raise ValueError("Please set a valid TELEGRAM_GROUP_ID")
+    
+    bot = TelegramBot(token, proxy_url, group_id)
     print(f"Bot started with proxy URL: {bot.proxy_url}")
     print("Press Ctrl+C to stop.")
     bot.run()
