@@ -1,7 +1,7 @@
 import os
 import logging
 from flask import Flask, request, jsonify, render_template, redirect, url_for
-import openai
+from openai import OpenAI
 from dotenv import load_dotenv
 from pinecone import Pinecone, ServerlessSpec
 from tenacity import retry, stop_after_attempt, wait_exponential
@@ -14,10 +14,8 @@ load_dotenv()
 app = Flask(__name__)
 app.secret_key = os.urandom(24)
 
-# Set the OpenAI API key
-openai.api_key = os.getenv('OPENAI_API_KEY')
-pinecone_api_key = os.getenv('PINECONE_API_KEY')
-pinecone_env = os.getenv('PINECONE_ENV')
+# Initialize OpenAI client
+client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
 
 # Initialize Pinecone
 pc = Pinecone(api_key=os.getenv('PINECONE_API_KEY'))
@@ -61,11 +59,11 @@ def timeout_handler(seconds=25):
 def get_embedding_with_retry(text: str, timeout: int = 10) -> List[float]:
     """Get embeddings with retry logic for API failures"""
     try:
-        return openai.Embedding.create(
+        response = client.embeddings.create(
             input=text,
-            model="text-embedding-ada-002",
-            timeout=timeout
-        )['data'][0]['embedding']
+            model="text-embedding-ada-002"
+        )
+        return response.data[0].embedding
     except Exception as e:
         logger.error(f"Error generating embedding: {str(e)}")
         raise
@@ -77,21 +75,23 @@ def generate_caption():
         data = request.json
         logger.info(f"Received data for caption generation: {data}")
         
-        tone = data.get('tone')
-        length = data.get('length')
+        tone = data.get('tone', 'professional')
+        length = data.get('length', 'medium')
         
-        response = openai.Completion.create(
+        response = client.chat.completions.create(
             model="gpt-4",
-            prompt=f"""
-            You are a social media manager for a company, Pixer. You need to generate a caption for a new product launch.
-            Generate a {length} caption in a {tone} tone.
-            Feel free to add hashtags and emojis to make the caption more engaging.
-            Product: Pixer 2.0
-            """,
-            max_tokens=50
+            messages=[
+                {"role": "system", "content": "You are a social media manager for a company, Pixer."},
+                {"role": "user", "content": f"""
+                Generate a {length} caption in a {tone} tone for a new product launch.
+                Add relevant hashtags and emojis to make the caption more engaging.
+                Product: Pixer 2.0
+                """}
+            ],
+            max_tokens=150
         )
         
-        caption = response.choices[0].text.strip()
+        caption = response.choices[0].message.content.strip()
         logger.info(f"Generated caption: {caption}")
         return jsonify({'caption': caption})
     except Exception as e:
